@@ -26,6 +26,8 @@ export default class BlurtExtension extends Extension {
     _api = false;
     _asrPath = '';
     _useClipboard = false;
+    _useVoxtral = false;
+    _mistralApiKey = '';
     _notificationSource = null;
     _buttonPressId = null;
     _buttonReleaseId = null;
@@ -53,6 +55,8 @@ export default class BlurtExtension extends Extension {
         this._api = this._settings.get_boolean('use-api');
         const whisperPath = this._settings.get_string('whisper-path');
         this._useClipboard = this._settings.get_boolean('use-clipboard');
+        this._useVoxtral = this._settings.get_boolean('use-voxtral');
+        this._mistralApiKey = this._settings.get_string('mistral-api-key');
 
         if (!whisperPath || !homeDir) {
              logError(new Error("Whisper path or home directory not found."), `${this.metadata.name}: Cannot build command.`);
@@ -79,6 +83,20 @@ export default class BlurtExtension extends Extension {
         this._args.push(this._asrPath);
         if (this._useClipboard) {
             this._args.push('-c');
+        }
+        if (this._useVoxtral) {
+            if (this._mistralApiKey && this._mistralApiKey.trim().length > 0) {
+                this._args.push('-v');
+                this._args.push('-k');
+                this._args.push(this._mistralApiKey);
+            } else {
+                logError(new Error("Voxtral enabled but API key is empty"), this.metadata.name);
+                this._notify(_("Blurt Error"), _("Voxtral API enabled but no API key configured. Check preferences."));
+                this._updateIndicatorStyle(STYLE_ERROR);
+                this._args = [];
+                this._isRecording = false;
+                return;
+            }
         }
         if (this._api) {
             const host = this._settings.get_string('whisper-ip');

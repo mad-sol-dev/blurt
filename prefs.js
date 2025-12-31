@@ -80,6 +80,27 @@ export default class BlurtPreferences extends ExtensionPreferences {
         useApiRow.bind_property('active', ipRow, 'sensitive', GObject.BindingFlags.DEFAULT);
         useApiRow.bind_property('active', portRow, 'sensitive', GObject.BindingFlags.DEFAULT);
 
+        const voxtralGroup = new Adw.PreferencesGroup({
+             title: _("Mistral Voxtral API"),
+             description: _("Cloud-based transcription with Voxtral (requires API key from console.mistral.ai)")
+        });
+        page.add(voxtralGroup);
+
+        const useVoxtralRow = new Adw.SwitchRow({
+            title: _("Use Voxtral API"),
+            subtitle: _("Zero VRAM, better accuracy, $0.001/min")
+        });
+        settings.bind('use-voxtral', useVoxtralRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        voxtralGroup.add(useVoxtralRow);
+
+        const apiKeyRow = new Adw.PasswordEntryRow({
+            title: _("Mistral API Key"),
+        });
+        settings.bind('mistral-api-key', apiKeyRow, 'text', Gio.SettingsBindFlags.DEFAULT);
+        voxtralGroup.add(apiKeyRow);
+
+        useVoxtralRow.bind_property('active', apiKeyRow, 'sensitive', GObject.BindingFlags.DEFAULT);
+
         const infoGroup = new Adw.PreferencesGroup({
              title: _("Usage Information")
         });

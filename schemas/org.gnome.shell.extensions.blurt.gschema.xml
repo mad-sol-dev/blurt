@@ -36,5 +36,15 @@
           <summary>Toggle to use clipboard</summary>
           <description>Use middle mouse button to paste (PRIMARY selection) or CTRL+V (clipboard))</description>
       </key>
+      <key name="use-voxtral" type="b">
+          <default>false</default>
+          <summary>Use Mistral Voxtral API</summary>
+          <description>Enable cloud-based transcription with Mistral Voxtral API (requires API key)</description>
+      </key>
+      <key name="mistral-api-key" type="s">
+          <default>""</default>
+          <summary>Mistral API Key</summary>
+          <description>Your Mistral API key from https://console.mistral.ai/</description>
+      </key>
   </schema>
 </schemalist>

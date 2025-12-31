@@ -10,11 +10,12 @@ The current code in `main` is tested on and supports ver. 48 (and likely 46 and 
 **Features:**
 - **Can use local whisper.cpp installation**
 - **Or transcribe with a whisper.cpp server** -[speedier and recommended](./NET_TRANSCRIBE.md).
+- **NEW. Cloud transcription with Mistral Voxtral API** - Zero VRAM, better accuracy, extremely affordable
 - **Right click for preferences and setup**
 - **Start/Stop speech-to-text input with a set of key bindings**
 - **Start/Stop speech-to-text input with a left click on the icon**
 - **Icon color shows status during operation**
-- **NEW. Option to transcribe with a [whisperfile](https://github.com/QuantiusBenignus/blurt?tab=readme-ov-file#whisperfile-inference)**
+- **Option to transcribe with a [whisperfile](https://github.com/QuantiusBenignus/blurt?tab=readme-ov-file#whisperfile-inference)**
 
 **UPDATE: GNOME SHELL version 48 is now supported in the main branch**. If installing directly from the [GNOME extensions website](https://extensions.gnome.org/extension/6742/blurt/), please, **get the "wsi" script from this repository** The unified functionality script `wsi` in the master branch is in sync with versions 6 and 8 of the extension published at [GNOME extensions](https://extensions.gnome.org/extension/6742/blurt/).
 
@@ -39,9 +40,12 @@ The convenience that this extension affords is demonstrated in this screencast (
 ### SYSTEM SETUP
 
 #### PREREQUISITES:
-- zsh or bash command line shell installation on a Linux system running GNOME.   
-- working whisper.cpp installation (see https://github.com/ggerganov/whisper.cpp or a downloaded [whisperfile](https://huggingface.co/Mozilla/whisperfile)
-- recent versions of `sox`, `xsel`, `curl` (or `wl-copy` for Wayland)  command-line tools from your system's repositories.
+- zsh or bash command line shell installation on a Linux system running GNOME.
+- **One of the following transcription backends:**
+  - **Voxtral API** (recommended) - Get free API key from [console.mistral.ai](https://console.mistral.ai/)
+  - **whisper.cpp installation** (see https://github.com/ggerganov/whisper.cpp)
+  - **whisperfile** (see https://huggingface.co/Mozilla/whisperfile)
+- recent versions of `sox`, `xsel`, `curl`, `jq` (or `wl-copy` for Wayland) command-line tools from your system's repositories.
 -  A working microphone 
 > *DISCLAIMER: Some of the proposed actions, if implemented, will alter how your system works internally (e.g. systemwide temporary file storage and memory management). The author neither takes credit nor assumes any responsibility for any outcome that may or may not result from interacting with the contents of this document. Suggestions in this section are based on the author's choice and opinion and may not fit the taste or the particular situation of everyone; please, adjust as you like.*
 
@@ -86,7 +90,34 @@ If installing/compiling whisper.cpp seems like a dounting task, one can simply d
 mv whisper-tiny.en.llamafile ~/.local/bin/
 chmod +x ~/.local/bin/whisper-tiny.en.llamafile
 ```
-The small cost to pay when using a whisperfile is that a compiled whisper.cpp will run inference faster (especially if compiled with full GPU support). The `wsi` script is set up in such a way that if the $WHISPERFILE variable in its CONFIG section is uncommented and points to a valid executable whisperfile (either full path to it or a qualified name in the PATH), the script will attempt first to perform transcription with the whisperfile. The whisper.cpp inference becomes the fallback option. Commenting out the $WHISPERFILE variable will revert to inference with whisper.cpp's `whisper-cli` or `whisper-server`.   
+The small cost to pay when using a whisperfile is that a compiled whisper.cpp will run inference faster (especially if compiled with full GPU support). The `wsi` script is set up in such a way that if the $WHISPERFILE variable in its CONFIG section is uncommented and points to a valid executable whisperfile (either full path to it or a qualified name in the PATH), the script will attempt first to perform transcription with the whisperfile. The whisper.cpp inference becomes the fallback option. Commenting out the $WHISPERFILE variable will revert to inference with whisper.cpp's `whisper-cli` or `whisper-server`.
+
+##### Voxtral API Inference (RECOMMENDED for RTX 3070 and similar GPUs)
+For users who have powerful GPUs but don't want to keep models loaded in VRAM 24/7, or those on lower-end hardware, Mistral's **Voxtral API** provides the best balance of performance, cost, and convenience.
+
+**Why Voxtral?**
+- **Zero VRAM usage** - No models kept in memory when idle
+- **Better accuracy** - Voxtral outperforms Whisper on many benchmarks
+- **Extremely affordable** - $0.001 per minute (~$1.50/year for typical personal use)
+- **No installation** - No need to compile whisper.cpp or download models
+- **Multilingual** - Auto-detects 9+ languages out of the box
+- **Privacy-respecting** - European company (GDPR compliant), open-source focused
+
+**Setup:**
+1. Get your free API key from [https://console.mistral.ai/](https://console.mistral.ai/)
+2. Open Blurt preferences (right-click the Ḅ indicator)
+3. Enable "Use Voxtral API" toggle
+4. Enter your Mistral API key
+5. Done! Voxtral will be used with highest priority
+
+**Configuration in wsi script:**
+Alternatively, you can configure Voxtral directly in the `wsi` script:
+```bash
+MISTRAL_API_KEY="your-api-key-here"  # Set your Mistral API key
+VOXTRAL_ENABLED=true                  # Set to true to enable Voxtral
+```
+
+When Voxtral is enabled, it takes highest priority. If it fails or is not configured, Blurt automatically falls back to whisper.cpp server, whisperfile, or local whisper.cpp.
 
 * Configure the script to match your environment (see CONFIGURATION section below).
 * Run once from the command line to let the script check for required dependencies.  

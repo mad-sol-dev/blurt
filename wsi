@@ -32,8 +32,18 @@ model="$HOME/CHANGE_PATH_TO/WHISPER_CPP/MODELS/HERE/ggml-base.en.bin"
 
 # Uncomment to use available (in the PATH) whisperfile (WITH BUILT-IN MODEL) instead of standalone whisper.cpp or whisper.cpp server
 #This mode has precedence over a whisper.cpp installation, so uncommenting it will make blurt default to the whisperfile.
-#The advantage of the whisperfile is that no installation is needed, the model is built-in, just `chmod +x whisperfile...` and it is ready to use. 
+#The advantage of the whisperfile is that no installation is needed, the model is built-in, just `chmod +x whisperfile...` and it is ready to use.
 #WHISPERFILE="whisper-tiny.en.llamafile" #this and others available from https://huggingface.co/Mozilla/whisperfile/tree/main
+
+# Mistral Voxtral API configuration (cloud-based transcription):
+# Set your Mistral API key here to enable Voxtral transcription.
+# Get your API key from: https://console.mistral.ai/
+# Voxtral is extremely affordable ($0.001/min) and provides better accuracy than Whisper.
+# This mode has highest precedence when enabled and will use zero VRAM on your machine.
+MISTRAL_API_KEY=""  # Set your Mistral API key here (or pass via environment variable)
+VOXTRAL_ENABLED=false  # Set to true to use Voxtral API
+VOXTRAL_MODEL="voxtral-mini-latest"  # Voxtral model to use
+VOXTRAL_ENDPOINT="https://api.mistral.ai/v1/audio/transcriptions"
 
 # Hardcoded temp wav file to store the voice memo and get overwritten every time (in RAM):
 ramf="$TEMPD/wfile-$USER"
@@ -51,8 +61,8 @@ WPORT="58080"
 
 #---CHECK DEPENDENCIES. This block can be commented out once dependencies confirmed-----------------------------------
 command -v curl &>/dev/null || { echo "curl is required. Please, install curl" >&2 ; exit 1 ; }
-#The next is only needed if curl requests json output from the whisper.cpp server;
-#command -v jq &>/dev/null || { echo "jq is required. Please, install jq" >&2 ; exit 1 ; }
+#The next is needed for Voxtral API and optionally for whisper.cpp server json output:
+command -v jq &>/dev/null || { echo "jq is required. Please, install jq" >&2 ; exit 1 ; }
 command -v sox &>/dev/null || { echo "sox is required. Please, install sox" >&2 ; exit 1 ; }
 command -v $WHISPERFILE &>/dev/null || { echo "No whisperfile found, get one from https://huggingface.co/Mozilla/whisperfile. Checking for whisper.cpp...   " ; \
 command -v transcribe &>/dev/null || { echo -e "Please, install whisper.cpp (see https://github.com/ggerganov/whisper.cpp)\
@@ -79,27 +89,39 @@ while [ $# -gt 0 ]; do
             CLIPBOARD=true
             shift
             ;;
+        -v|--voxtral)
+            # Enable Voxtral mode (API key must be set in config or environment)
+            VOXTRAL_ENABLED=true
+            shift
+            ;;
+        -k|--api-key)
+            # Set Mistral API key from command line argument
+            MISTRAL_API_KEY="$2"
+            shift 2
+            ;;
         -n|--netapi)
             #This uses the hostname or IP and port specified in the config block (when run from CLI or set in Blurt with '-something')
             #Can be overwritten from Blurt, supplied as command line flag IP:PORT instead of this option
-            IPnPORT="$WHOST:$WPORT" 
+            IPnPORT="$WHOST:$WPORT"
             if [[ "$(curl -s -f -o /dev/null -w '%{http_code}' $IPnPORT)" != "200" ]]; then
-                echo "Can't connect to whisper.cpp server at provided address!" >&2   
+                echo "Can't connect to whisper.cpp server at provided address!" >&2
                 exit 1
             fi
             shift
             ;;
         -h|--help)
-            echo "Usage: $0 [-c|--clipboard] [-n|--netapi]"
+            echo "Usage: $0 [-c|--clipboard] [-v|--voxtral] [-k|--api-key KEY] [-n|--netapi]"
             echo "  -c, --clipboard: Use clipboard instead of PRIMARY selection"
-            echo "  -n, --netapi: Use whisper.cpp server with the host:port in the GONFIG block"
+            echo "  -v, --voxtral: Use Mistral Voxtral API for transcription"
+            echo "  -k, --api-key: Set Mistral API key (alternative to config file)"
+            echo "  -n, --netapi: Use whisper.cpp server with the host:port in the CONFIG block"
             exit 0
             ;;
         *)
             #The network address and port should have already been sanitized in extension
             IPnPORT=$1
             if [[ "$(curl -s -f -o /dev/null -w '%{http_code}' $IPnPORT)" != "200" ]]; then
-                echo "Can't connect to a whisper.cpp server at provided address!" >&2   
+                echo "Can't connect to a whisper.cpp server at provided address!" >&2
                 exit 1
             fi
             shift
@@ -109,8 +131,35 @@ done
 
 #trap "" SIGINT
 rec -q -t wav $ramf rate 16k silence 1 0.1 1% 1 2.0 5%  2>/dev/null
- 
-if [ -n "$IPnPORT" ]; then
+
+# Priority 1: Voxtral API (cloud-based, zero VRAM, best accuracy)
+if [[ "$VOXTRAL_ENABLED" == true && -n "$MISTRAL_API_KEY" ]]; then
+    response=$(curl -s --location "$VOXTRAL_ENDPOINT" \
+        --header "x-api-key: $MISTRAL_API_KEY" \
+        --form "file=@\"$ramf\"" \
+        --form "model=\"$VOXTRAL_MODEL\"" 2>&1)
+
+    # Check if curl succeeded
+    if [ $? -eq 0 ]; then
+        # Try to extract text from JSON response
+        str=$(echo "$response" | jq -r '.text' 2>/dev/null)
+
+        # If jq failed or returned null, check for API error
+        if [ -z "$str" ] || [ "$str" == "null" ]; then
+            error_msg=$(echo "$response" | jq -r '.error.message' 2>/dev/null)
+            if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+                echo "Voxtral API error: $error_msg" >&2
+            else
+                echo "Voxtral API returned unexpected response: $response" >&2
+            fi
+            exit 1
+        fi
+    else
+        echo "Failed to connect to Voxtral API" >&2
+        exit 1
+    fi
+# Priority 2: whisper.cpp server (network/LAN)
+elif [ -n "$IPnPORT" ]; then
     str=$(curl -S -s $IPnPORT/inference \
         -H "Content-Type: multipart/form-data" \
         -F file="@$ramf" \
@@ -118,12 +167,14 @@ if [ -n "$IPnPORT" ]; then
         -F temperature_inc="0.2" \
         -F response_format="text")
 # | jq -r '.text' )
-elif command -v $WHISPERFILE &>/dev/null ; then 
+# Priority 3: Whisperfile (portable executable with embedded model)
+elif command -v $WHISPERFILE &>/dev/null ; then
     str="$($WHISPERFILE -t $NTHR -nt -f $ramf 2>/dev/null)"
     #One can still use the standalone model with the whisperfile, if so desired:
     #str="$($WHISPERFILE -t $NTHR -nt -m $model -f $ramf 2>/dev/null)"
+# Priority 4: Local whisper.cpp (fallback)
 else
-    str="$(transcribe -t $NTHR -nt -m $model -f $ramf 2>/dev/null)" 
+    str="$(transcribe -t $NTHR -nt -m $model -f $ramf 2>/dev/null)"
 fi
 # Whisper detected non-speech events such as (wind blowing): 
 str="${str/\(*\)}"   
